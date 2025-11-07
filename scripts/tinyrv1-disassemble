@@ -1,0 +1,89 @@
+#!/usr/bin/env python
+#=========================================================================
+# tinyrv1-dissassemble [options] <bin-file>
+#=========================================================================
+#
+#  -h --help         Display this message
+#  -v --verbose      Verbose mode
+#
+# Disassemble a TinyRV1 binary file into a TinyRV1 assembly file.
+#
+# Author : Christopher Batten
+# Date   : October 31, 2025
+#
+
+# Hack to add project root to python path
+
+import os
+import sys
+
+scripts_dir = os.path.dirname( os.path.abspath( __file__ ) )
+while scripts_dir:
+  if os.path.exists( scripts_dir + os.path.sep + "configure.ac" ):
+    sys.path.insert(0,scripts_dir)
+    break
+  scripts_dir = os.path.dirname(scripts_dir)
+
+import argparse
+import re
+
+from scripts.assemble.tinyrv2_encoding import disassemble
+from scripts.assemble.SparseMemoryImage import SparseMemoryImage
+
+#-------------------------------------------------------------------------
+# Command line processing
+#-------------------------------------------------------------------------
+
+class ArgumentParserWithCustomError(argparse.ArgumentParser):
+  def error( self, msg = "" ):
+    if ( msg ): print("\n ERROR: %s" % msg)
+    print("")
+    file = open( sys.argv[0] )
+    for ( lineno, line ) in enumerate( file ):
+      if ( line[0] != '#' ): sys.exit(msg != "")
+      if ( (lineno == 2) or (lineno >= 4) ): print( line[1:].rstrip("\n") )
+
+def parse_cmdline():
+  p = ArgumentParserWithCustomError( add_help=False )
+  p.add_argument( "-v", "--verbose",     action="store_true" )
+  p.add_argument( "-h", "--help",        action="store_true" )
+  p.add_argument( "bin_file" )
+  opts = p.parse_args()
+  if opts.help: p.error()
+  return opts
+
+#-------------------------------------------------------------------------
+# Main
+#-------------------------------------------------------------------------
+
+def main():
+  opts = parse_cmdline()
+
+  if not os.path.exists( opts.bin_file ):
+    print(f"\n ERROR: Binary file {opts.bin_file} does not exist!\n");
+    return
+
+  data = bytearray()
+  with open( opts.bin_file ) as f:
+    for line in f:
+      bits = line.strip().replace("_", "")
+      if not bits:
+        continue
+      val = int(bits, 2)
+      data.extend(val.to_bytes(4, 'little'))
+
+  text_section = SparseMemoryImage.Section( ".text", 0x0000, data )
+
+  mem_image = SparseMemoryImage()
+  mem_image.add_section( text_section )
+
+  print("")
+  print(" address     binary                            assembly")
+  print(" ----------------------------------------------------------------------")
+
+  print(disassemble(mem_image))
+
+if __name__ == "__main__":
+    main()
+
+
